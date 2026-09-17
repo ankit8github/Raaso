@@ -40,7 +40,7 @@ export const OnboardingPage: React.FC = () => {
   const [instagramHandle, setInstagramHandle] = useState('');
   const [intent, setIntent] = useState('hardcore_garba');
   const [danceLevel, setDanceLevel] = useState('intermediate');
-  const [selectedVibes, setSelectedVibes] = useState<string[]>(['energetic', 'traditional']);
+  const [selectedVibes, setSelectedVibes] = useState<string[]>(['traditional', 'high_energy']);
   const [groupSize, setGroupSize] = useState<number>(6);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
