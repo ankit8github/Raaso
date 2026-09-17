@@ -197,3 +197,158 @@ def test_matches_api_endpoint(client):
     assert "https://wa.me/?text=" in matches[0]["whatsapp_link"]
     assert len(matches[0]["reasons"]) > 0
 
+def test_matching_score_is_bounded_between_zero_and_hundred():
+    engine = MatchingEngine()
+    event_id = uuid.uuid4()
+
+    att1 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="hardcore_garba",
+        dance_level="pro",
+        vibes="energetic, traditional, fast_paced",
+        group_size_preference=6,
+    )
+
+    att2 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="hardcore_garba",
+        dance_level="pro",
+        vibes="energetic, traditional, fast_paced",
+        group_size_preference=6,
+    )
+
+    score, _ = engine.calculate_match_score(att1, att2)
+
+    assert 0 <= score <= 100
+
+
+def test_vibe_parser_handles_commas_semicolons_and_case():
+    engine = MatchingEngine()
+
+    result = engine.parse_vibes("Energetic, Traditional; late_night, energetic")
+
+    assert result == {
+        "energetic",
+        "traditional",
+        "late_night",
+    }
+
+
+def test_matching_engine_handles_missing_vibes():
+    engine = MatchingEngine()
+    event_id = uuid.uuid4()
+
+    att1 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="social_casual",
+        dance_level="beginner",
+        vibes=None,
+        group_size_preference=4,
+    )
+
+    att2 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="social_casual",
+        dance_level="beginner",
+        vibes="energetic",
+        group_size_preference=4,
+    )
+
+    score, reasons = engine.calculate_match_score(att1, att2)
+
+    assert score > 0
+    assert "Open to all event vibes" in reasons
+
+
+def test_matching_engine_handles_different_group_preferences():
+    engine = MatchingEngine()
+    event_id = uuid.uuid4()
+
+    att1 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="social_casual",
+        dance_level="intermediate",
+        vibes="energetic",
+        group_size_preference=2,
+    )
+
+    att2 = Attendance(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        event_id=event_id,
+        intent="social_casual",
+        dance_level="intermediate",
+        vibes="energetic",
+        group_size_preference=10,
+    )
+
+    score, reasons = engine.calculate_match_score(att1, att2)
+
+    assert score > 0
+    assert "Different squad size preferences" in reasons
+
+
+def test_matches_api_respects_limit(client):
+    event = client.post(
+        "/api/events",
+        json={
+            "name": "Limit Test Garba",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    ).json()
+
+    users = []
+    for i in range(4):
+        user = client.post(
+            "/api/users",
+            json={
+                "display_name": f"Dancer {i}",
+                "city": "Ahmedabad",
+            },
+        ).json()
+        users.append(user)
+
+        client.post(
+            "/api/attendances",
+            json={
+                "user_id": user["id"],
+                "event_id": event["id"],
+                "intent": "social_casual",
+                "dance_level": "intermediate",
+                "vibes": "energetic",
+                "group_size_preference": 4,
+            },
+        )
+
+    first_attendance = client.get(
+        f"/api/attendances/user/{users[0]['id']}"
+    ).json()[0]
+
+    response = client.get(
+        f"/api/attendances/{first_attendance['id']}/matches?limit=2"
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_matches_api_with_nonexistent_attendance_returns_404(client):
+    response = client.get(
+        f"/api/attendances/{uuid.uuid4()}/matches"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Attendance not found"

@@ -148,3 +148,130 @@ def test_update_nonexistent_attendance_returns_404(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Attendance not found"
+def test_create_attendance_with_nonexistent_user_returns_404(client):
+    event_res = client.post(
+        "/api/events",
+        json={
+            "name": "Test Garba Event",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    )
+    assert event_res.status_code == 201
+    event_id = event_res.json()["id"]
+
+    response = client.post(
+        "/api/attendances",
+        json={
+            "user_id": "00000000-0000-0000-0000-000000000000",
+            "event_id": event_id,
+            "intent": "hardcore_garba",
+            "dance_level": "beginner",
+        },
+    )
+
+    assert response.status_code == 404
+    assert "user" in response.json()["detail"].lower()
+
+
+def test_create_attendance_with_nonexistent_event_returns_404(client):
+    user_res = client.post(
+        "/api/users",
+        json={
+            "display_name": "Test User",
+            "city": "Ahmedabad",
+        },
+    )
+    assert user_res.status_code == 201
+    user_id = user_res.json()["id"]
+
+    response = client.post(
+        "/api/attendances",
+        json={
+            "user_id": user_id,
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "intent": "hardcore_garba",
+            "dance_level": "beginner",
+        },
+    )
+
+    assert response.status_code == 404
+    assert "event" in response.json()["detail"].lower()
+
+
+def test_create_attendance_for_inactive_event_returns_400(client):
+    user_res = client.post(
+        "/api/users",
+        json={
+            "display_name": "Test User",
+            "city": "Ahmedabad",
+        },
+    )
+    assert user_res.status_code == 201
+    user_id = user_res.json()["id"]
+
+    event_res = client.post(
+        "/api/events",
+        json={
+            "name": "Inactive Garba Event",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": False,
+        },
+    )
+    assert event_res.status_code == 201
+    event_id = event_res.json()["id"]
+
+    response = client.post(
+        "/api/attendances",
+        json={
+            "user_id": user_id,
+            "event_id": event_id,
+            "intent": "hardcore_garba",
+            "dance_level": "beginner",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "no longer active" in response.json()["detail"].lower()
+
+
+def test_create_attendance_with_invalid_group_size_returns_422(client):
+    user_res = client.post(
+        "/api/users",
+        json={
+            "display_name": "Test User",
+            "city": "Ahmedabad",
+        },
+    )
+    assert user_res.status_code == 201
+    user_id = user_res.json()["id"]
+
+    event_res = client.post(
+        "/api/events",
+        json={
+            "name": "Test Garba Event",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    )
+    assert event_res.status_code == 201
+    event_id = event_res.json()["id"]
+
+    response = client.post(
+        "/api/attendances",
+        json={
+            "user_id": user_id,
+            "event_id": event_id,
+            "intent": "hardcore_garba",
+            "dance_level": "beginner",
+            "group_size_preference": 0,
+        },
+    )
+
+    assert response.status_code == 422

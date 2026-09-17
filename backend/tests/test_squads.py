@@ -95,3 +95,140 @@ def test_squad_lifecycle_and_capacity_limits(client):
     assert user3_join.status_code == 200
     assert user3_join.json()["member_count"] == 2
 
+def test_create_squad_with_nonexistent_event_returns_404(client):
+    user_res = client.post(
+        "/api/users",
+        json={"display_name": "Creator", "city": "Ahmedabad"},
+    )
+    assert user_res.status_code == 201
+
+    response = client.post(
+        "/api/squads",
+        json={
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "name": "Test Squad",
+            "created_by": user_res.json()["id"],
+            "max_members": 4,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Event not found"
+
+
+def test_create_squad_with_nonexistent_creator_returns_404(client):
+    event_res = client.post(
+        "/api/events",
+        json={
+            "name": "Test Garba",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    )
+    assert event_res.status_code == 201
+
+    response = client.post(
+        "/api/squads",
+        json={
+            "event_id": event_res.json()["id"],
+            "name": "Test Squad",
+            "created_by": "00000000-0000-0000-0000-000000000000",
+            "max_members": 4,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Creator user not found"
+
+
+def test_join_squad_with_nonexistent_user_returns_404(client):
+    event = client.post(
+        "/api/events",
+        json={
+            "name": "Test Garba",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    ).json()
+
+    creator = client.post(
+        "/api/users",
+        json={"display_name": "Creator", "city": "Ahmedabad"},
+    ).json()
+
+    squad = client.post(
+        "/api/squads",
+        json={
+            "event_id": event["id"],
+            "name": "Test Squad",
+            "created_by": creator["id"],
+            "max_members": 4,
+        },
+    ).json()
+
+    response = client.post(
+        f"/api/squads/{squad['id']}/join",
+        json={
+            "user_id": "00000000-0000-0000-0000-000000000000",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found"
+
+
+def test_join_nonexistent_squad_returns_404(client):
+    response = client.post(
+        "/api/squads/00000000-0000-0000-0000-000000000000/join",
+        json={
+            "user_id": "00000000-0000-0000-0000-000000000000",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Active squad not found"
+
+
+def test_leave_squad_when_not_a_member_returns_404(client):
+    event = client.post(
+        "/api/events",
+        json={
+            "name": "Test Garba",
+            "city": "Ahmedabad",
+            "venue": "Test Venue",
+            "starts_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        },
+    ).json()
+
+    creator = client.post(
+        "/api/users",
+        json={"display_name": "Creator", "city": "Ahmedabad"},
+    ).json()
+
+    other_user = client.post(
+        "/api/users",
+        json={"display_name": "Other User", "city": "Ahmedabad"},
+    ).json()
+
+    squad = client.post(
+        "/api/squads",
+        json={
+            "event_id": event["id"],
+            "name": "Test Squad",
+            "created_by": creator["id"],
+            "max_members": 4,
+        },
+    ).json()
+
+    response = client.post(
+        f"/api/squads/{squad['id']}/leave",
+        json={"user_id": other_user["id"]},
+    )
+
+    assert response.status_code == 404
+    assert "membership not found" in response.json()["detail"].lower()
